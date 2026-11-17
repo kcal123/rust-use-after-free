@@ -77,6 +77,6 @@ Rust doesn't prevent every possible memory error, particularly when unsafe Rust 
 
 ## Presentation and references
 
-[COMP 211 Presentation](Rust%20Use-After-Free%20-%20Kyle%20Caligan.pptx)
+[COMP 211 Presentation](Rust%20Use-After-Free%20-%20Kyle%20Caligan%20%284%29.pptx)
 
 Additional documentation and resources are listed in [REFERENCES.md](REFERENCES.md).

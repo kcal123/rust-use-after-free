@@ -1,74 +1,82 @@
 # Rust Ownership: Preventing Use-After-Free Errors
 
-This is my project for COMP 211 Checkoff 3. We have been working with pointers, `malloc`, and `free` in C, so I wanted to see how Rust deals with a similar memory error.
+This project is for COMP 211 Checkoff 3. We've been learning about pointers and memory management in C, so I decided to look into how Rust, another programming language handles some of the same issues.
 
-I focused on **use-after-free**: when a program tries to read or write memory after it has already been freed. I tested an example in C and compared it with a similar example in Rust.
+The main focus was use-after-free errors, which happen when a program tries to access memory after it's already been freed. I wanted to compare what happens when this mistake is made in C versus Rust.
 
-## What I tried
+## Testing use-after-free in C
 
-### 1. Use-after-free in C
+I started with a short C program that allocates memory for an integer and stores the value 42. Then I created a second pointer to the same memory.
 
-File: [use_after_free.c](use_after_free.c)
+After calling `free(p)`, the program tries to access that memory again through `q`. Since the allocation has already been freed, this is undefined behavior.
 
-The C program allocates space for an integer, stores `42`, and sets another pointer, `q`, equal to `p`. Both pointers refer to the same allocation. After `free(p)`, the code tries to print `*q`, even though that memory is no longer valid to access.
+The code is in [use_after_free.c](use_after_free.c).
 
-I tested this in Compiler Explorer using GCC with AddressSanitizer enabled. **The C code compiled, but AddressSanitizer reported a `heap-use-after-free` error when the program ran.**
+I originally tried running the code through VS Code, but GCC wasn't available on my computer. Instead, I used Compiler Explorer with AddressSanitizer enabled.
 
-Screenshot: [C AddressSanitizer result](c-address-sanitizer.png)
+The code compiled, but AddressSanitizer detected a `heap-use-after-free` error when it ran. Without AddressSanitizer, the program might have appeared to work, even though the memory access was invalid.
 
-The program has *undefined behavior*. Without a tool like AddressSanitizer, it might appear to work, crash, or do something else. Printing `42` would not mean the code was safe.
+[C AddressSanitizer screenshot](c-address-sanitizer.png)
 
-### 2. The equivalent mistake in Rust
+## Trying the same thing in Rust
 
-File: [rejected.rs](rejected.rs)
+Next, I tried a similar example in Rust using `Box::new(42)` to allocate an integer on the heap.
 
-In the Rust example, `Box::new(42)` puts an integer on the heap, and `value` owns that allocation. `reference` borrows the integer using `&*value`. The program then tries to call `drop(value)` before using `reference`.
+The variable `value` owns the Box, while `reference` borrows the integer stored inside it. The code then tries to destroy the Box using `drop(value)` before the reference has finished being used.
 
-I tested this in Rust Playground. **It did not compile.** The compiler returned error **E0505**, saying it could not move out of `value` because it was borrowed.
+At first, I thought the program might compile and then crash, similar to what could happen in C. Instead, Rust refused to compile it.
 
-Screenshot: [Rust compiler error E0505](rust-e0505.png)
+The compiler gave error E0505 because the program was trying to drop a value that was still borrowed.
 
-This was the part that surprised me. I initially expected the Rust program to compile and possibly crash, as a similar program could in C. Instead, Rust rejected the code before running it.
+[Rust code that doesn't compile](rejected.rs)
 
-### 3. Fixing the Rust program
+[Rust compiler error screenshot](rust-e0505.png)
 
-File: [fixed.rs](fixed.rs)
+## Fixing the Rust code
 
-The fix is to print through the reference **before** calling `drop(value)`. The borrow is no longer needed after its last use, so the owner can safely be dropped.
+The fix was fairly simple. Instead of dropping the Box before using the reference, I moved the `println!` statement before `drop(value)`.
 
-The corrected program prints `42` when compiled and run.
+This allows the reference to be used while the memory is still valid. Once the reference is no longer needed, the Box can safely be dropped.
 
-## How to reproduce the examples
+The corrected program compiles and prints `42`.
 
-### C (Compiler Explorer)
+[Corrected Rust code](fixed.rs)
 
-1. Open [Compiler Explorer](https://godbolt.org/) and set the language to **C**.
-2. Copy the contents of [use_after_free.c](use_after_free.c) into the editor.
-3. Select an x86-64 GCC compiler and use these compiler options:
+## Running the examples
 
-```
--g -O0 -fsanitize=address
-```
+**C**
 
-4. Enable **Execute the code** in the compiler settings.
-5. Open the output panel. You should see an AddressSanitizer `heap-use-after-free` error.
+1. Open [Compiler Explorer](https://godbolt.org/) and select C.
+2. Copy the code from [use_after_free.c](use_after_free.c).
+3. Choose a GCC compiler and enter `-g -O0 -fsanitize=address` in the compiler options.
+4. Enable **Execute the code**.
+5. The output should show a `heap-use-after-free` error.
 
-You can also compile with a local GCC that supports AddressSanitizer:
+If GCC is installed locally with AddressSanitizer support, the program can also be compiled with:
 
-```bash
-gcc -g -O0 -fsanitize=address -fno-omit-frame-pointer use_after_free.c -o use_after_free
-./use_after_free
-```
+`gcc -g -O0 -fsanitize=address -fno-omit-frame-pointer use_after_free.c -o use_after_free`
 
-This example intentionally contains a memory error and is meant to be run with a memory diagnostic tool.
+Then run `./use_after_free`.
 
-### Rust (Rust Playground)
+**Rust**
 
 1. Open [Rust Playground](https://play.rust-lang.org/).
-2. Paste the contents of [rejected.rs](rejected.rs) and select **Run**. You should see compiler error E0505 rather than normal program output.
-3. Replace it with [fixed.rs](fixed.rs) and select **Run** again. This version should print `42`.
+2. Paste the code from [rejected.rs](rejected.rs) and click Run.
+3. The compiler should return error E0505.
+4. Replace it with [fixed.rs](fixed.rs) and run it again. The corrected version prints `42`.
 
 ## What I learned
 
-- In C, it's possible to have two pointers to the same allocation and accidentally keep using one after calling `free`.
-- Rust
+The biggest difference I noticed was when each language detected the problem.
+
+In C, the program compiled even though it contained a use-after-free error. AddressSanitizer caught it when the program ran.
+
+In Rust, the ownership and borrowing rules prevented the program from compiling in the first place. The compiler recognized that a reference was still needed after the owner would have been destroyed.
+
+Rust doesn't prevent every possible memory error, particularly when unsafe Rust is used, but its ownership rules prevented the mistake in this example.
+
+## Presentation and references
+
+[COMP 211 Presentation](Rust%20Use-After-Free%20-%20Kyle%20Caligan.pptx)
+
+Additional documentation and resources are listed in [REFERENCES.md](REFERENCES.md).
